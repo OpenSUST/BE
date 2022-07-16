@@ -1,11 +1,21 @@
-import { MongoClient } from 'mongodb';
-import './api';
+import Schema from 'schemastery';
 import { emit } from './bus';
+import { connect } from './services';
+
+Schema.extend('image', (data) => {
+    if (typeof data === 'string') return [data];
+    throw new TypeError(`expected image but got ${data}`);
+});
 
 async function main() {
-    const conn = await MongoClient.connect('mongodb://192.168.1.4:27017/test');
-    const db = conn.db('test');
+    const db = await connect();
+    require('./api');
     require('./apis/test');
+    require('./apis/templates');
+    require('./apis/key');
+    require('./apis/user');
+    require('./apis/file');
+    require('./apis/item');
     emit('app/started', db);
 }
 main();

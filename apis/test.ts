@@ -1,5 +1,3 @@
-import { registerResolver } from "../api";
+import { registerResolver } from '../api';
 
-registerResolver('Query', 'hello(foo: ObjectID)', 'String', (args, ctx, info) => {
-    return 'Hello world!';
-});
+registerResolver('Query', 'ping', 'String', () => 'pong');

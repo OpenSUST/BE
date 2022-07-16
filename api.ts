@@ -1,6 +1,12 @@
-import { ApolloServer, gql } from 'apollo-server';
-import { typeDefs, resolvers as scalarResolvers } from 'graphql-scalars';
+import { makeExecutableSchema } from '@graphql-tools/schema';
+import { getDirective, MapperKind, mapSchema } from '@graphql-tools/utils';
+import { ApolloServer } from 'apollo-server';
+import { defaultFieldResolver } from 'graphql';
+import { resolvers as scalarResolvers, typeDefs } from 'graphql-scalars';
 import * as bus from './bus';
+import { db } from './services';
+
+const coll = db.collection('user');
 
 const types: Record<string, Record<string, string>> = {};
 const unions: Record<string, string> = {};
@@ -8,6 +14,7 @@ const descriptions: Record<string, Record<string, string>> = {};
 const handlers: Record<string, Record<string, any>> = {
     ...scalarResolvers,
     Query: {},
+    Mutation: {},
 };
 
 export function registerValue(typeName: string, key: string, value: string, description?: string): void;
@@ -32,7 +39,8 @@ export function registerResolver(
     description?: string,
 ) {
     registerValue(typeName, key, value, description);
-    const wrappedFunc = async (arg, ctx, info) => {
+    if (typeName === 'Query') registerValue('Mutation', key, value, description);
+    const wrappedFunc = async (_, arg, ctx, info) => {
         const res = await func(arg, ctx, info);
         if (typeof res !== 'object' || res === null) return res;
         const node = value.includes('!') ? value.split('!')[0] : value;
@@ -42,6 +50,10 @@ export function registerResolver(
     };
     if (handlers[typeName]) handlers[typeName][key.split('(')[0].trim()] = wrappedFunc;
     else handlers[typeName] = { [key.split('(')[0].trim()]: wrappedFunc };
+    if (typeName === 'Query') {
+        if (handlers.Mutation) handlers.Mutation[key.split('(')[0].trim()] = wrappedFunc;
+        else handlers.Mutation = { [key.split('(')[0].trim()]: wrappedFunc };
+    }
 }
 
 export function registerUnion(typeName: string, ...unionTypes: string[]) {
@@ -53,37 +65,81 @@ function setDescription(desc: string) {
     return JSON.stringify(desc);
 }
 
+function getUser(user: any) {
+    return {
+        hasRole: (role: string) => {
+            if (!user) return role === 'GUEST';
+            return user.roles.includes(role);
+        },
+    };
+}
+const typeDirectiveArgumentMaps: Record<string, any> = {};
+
 bus.on('app/started', () => {
-    let schemaStr = '';
+    const defs = [
+        ...Object.keys(unions).map((i) => `union ${i} = ${unions[i]}`),
+        /* GraphQL */ `
+            directive @auth(requires: Role = ADMIN) on OBJECT | FIELD_DEFINITION
+            enum Role {
+                ADMIN
+                USER
+                GUEST
+            }
+            `,
+        ...typeDefs,
+        ...Object.keys(types).map((key) => {
+            let def = '';
+            if (descriptions[key]?._description) def += `${setDescription(descriptions[key]._description)}\n`;
+            def += `type ${key}{\n`;
+            for (const k in types[key]) {
+                if (descriptions[key]?.[k]) def += `  ${setDescription(descriptions[key][k])}\n`;
+                def += `  ${k}: ${types[key][k]}\n`;
+            }
+            def += '}\n';
+            return def;
+        }),
+    ];
 
-    try {
-        const defs = [
-            ...Object.keys(unions).map((i) => `union ${i} = ${unions[i]}`),
-            ...typeDefs,
-            ...Object.keys(types).map((key) => {
-                let def = '';
-                if (descriptions[key]?._description) def += `${setDescription(descriptions[key]._description)}\n`;
-                def += `type ${key}{\n`;
-                for (const k in types[key]) {
-                    if (descriptions[key]?.[k]) def += `  ${setDescription(descriptions[key][k])}\n`;
-                    def += `  ${k}: ${types[key][k]}\n`;
-                }
-                def += '}\n';
-                return def;
-            }),
-        ];
-        schemaStr = defs.join('\n');
-    } catch (e) {
-        console.error(e);
-    }
-
+    const schema = makeExecutableSchema({ typeDefs: defs, resolvers: handlers });
     const server = new ApolloServer({
-        typeDefs: gql(schemaStr),
-        resolvers: handlers,
+        schema: mapSchema(schema, {
+            [MapperKind.TYPE]: (type) => {
+                const authDirective = getDirective(schema, type, 'auth')?.[0];
+                if (authDirective) {
+                    typeDirectiveArgumentMaps[type.name] = authDirective;
+                }
+                return undefined;
+            },
+            [MapperKind.OBJECT_FIELD]: (fieldConfig, _fieldName, typeName) => {
+                const authDirective = getDirective(schema, fieldConfig, 'auth')?.[0] ?? typeDirectiveArgumentMaps[typeName];
+                if (authDirective) {
+                    const { requires } = authDirective;
+                    if (requires) {
+                        const { resolve = defaultFieldResolver } = fieldConfig;
+                        fieldConfig.resolve = function (source, args, context, info) {
+                            const user = getUser(context.currentUser);
+                            if (!user.hasRole(requires)) throw new Error('not authorized');
+                            return resolve(source, args, context, info);
+                        };
+                        return fieldConfig;
+                    }
+                }
+            },
+        }),
         csrfPrevention: true,
+        debug: true,
+        context: async ({ req }) => ({
+            currentUser: await coll.findOne({ token: req.headers.authorization }),
+        }),
     });
 
-    server.listen().then(({ url }) => {
+    server.listen(4000, '0.0.0.0').then(({ url }) => {
         console.log(`🚀  Server ready at ${url}`);
     });
 });
+
+coll.updateOne({ _id: '123test' }, {
+    $set: {
+        token: ['123test'], password: '1', roles: ['GUEST', 'USER', 'ADMIN'], username: 'testuser',
+    },
+}, { upsert: true });
