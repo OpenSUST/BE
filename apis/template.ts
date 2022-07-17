@@ -20,6 +20,19 @@ registerResolver('TemplateContext', 'add(name: String!, payload: JSON!)', 'Strin
     });
     return res.insertedId;
 });
+registerResolver('TemplateContext', 'update(id: String!, name: String, payload: JSON)', 'Boolean!', async (args, ctx, info) => {
+    await collTemplates.updateOne({ _id: args.id }, { $set: { payload: args.payload, name: args.name } });
+    await elastic.delete({
+        index: 'template',
+        id: args.id,
+    });
+    await elastic.index({
+        index: 'template',
+        id: args.id,
+        body: { name: args.name },
+    });
+    return true;
+});
 registerResolver('TemplateContext', 'del(id: String!)', 'Boolean! @auth', async (args, ctx, info) => {
     const res = await collTemplates.deleteOne({ _id: args.id });
     await elastic.delete({

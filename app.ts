@@ -11,7 +11,7 @@ async function main() {
     const db = await connect();
     require('./api');
     require('./apis/test');
-    require('./apis/templates');
+    require('./apis/template');
     require('./apis/key');
     require('./apis/user');
     require('./apis/file');
