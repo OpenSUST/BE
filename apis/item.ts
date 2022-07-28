@@ -13,7 +13,7 @@ async function loadSchema(keys: string[]) {
     const f = await collKeys.find({ _id: { $in: keys } }).toArray();
     return Schema.object(
         Object.fromEntries(
-            keys.map((i) => [i, new Schema(JSON.parse(f.find((k) => k._id === i)?.schema!))]),
+            keys.map((i) => [i, new Schema(JSON.parse(f.find((k) => k._id === i)?.schema || "{ uid: 1, refs: { '1': { type: 'never', meta: {} } } }"))]),
         ),
     );
 }
@@ -64,9 +64,11 @@ registerResolver('ItemContext', 'del(id: String!)', 'Boolean!  @auth', async (ar
 registerResolver('ItemContext', 'get(id: String!)', 'ItemResponse', async (args) => {
     const doc = await collData.findOne({ _id: args.id });
     if (!doc) return { items: [], schema: Schema.object({}).toJSON() };
+    const keys = Object.keys(doc).filter((i) => doc[i] !== null);
+    const adoc = _.pick(doc, keys);
     return {
-        items: [doc],
-        schema: (await loadSchema(Object.keys(doc))).toJSON(),
+        items: [adoc],
+        schema: (await loadSchema(keys)).toJSON(),
         total: 1,
     };
 });
