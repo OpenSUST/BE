@@ -25,6 +25,7 @@ registerResolver('KeyContext', 'setLocalization(key: String!, lang: String!, val
     console.log(res);
     return !!res.modifiedCount;
 });
+registerResolver('KeyContext', 'count', 'Int', async () => await collKeys.countDocuments());
 
 function baseSchema(_id: string, localization: Record<string, string>, schema: any) {
     collKeys.updateOne({ _id }, { $set: { localization, schema: JSON.stringify(schema.toJSON()) } }, { upsert: true });
