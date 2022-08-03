@@ -1,9 +1,27 @@
+import assert from 'assert';
 import { Collection } from 'mongodb';
 import { nanoid } from 'nanoid';
 import { registerResolver, registerValue } from '../api';
 import { db, elastic } from '../services';
 
-const collTemplates: Collection<{ _id: string, name: string, payload: string }> = db.collection('templates');
+const collTemplates: Collection<{ _id: string, name: string, payload: any }> = db.collection('templates');
+(async () => {
+    const r = await collTemplates.findOne({ name: '000000000000000000000' });
+    if (!r) {
+        collTemplates.insertOne({
+            _id: '000000000000000000000',
+            name: '默认模板',
+            payload: [
+                { key: '_id' },
+                { key: 'title' },
+                { key: 'description' },
+                { key: 'images' },
+                { key: 'file' },
+            ],
+        });
+    }
+})();
+
 registerValue('Template', [
     ['_id', 'String!'],
     ['name', 'String!'],
@@ -21,6 +39,9 @@ registerResolver('TemplateContext', 'add(name: String!, payload: JSON!)', 'Strin
     return res.insertedId;
 });
 registerResolver('TemplateContext', 'update(id: String!, name: String, payload: JSON)', 'Boolean!', async (args, ctx, info) => {
+    if (args.id === '000000000000000000000') {
+        assert(['_id', 'title', 'description', 'images', 'file'].map((i) => args.payload.find((i: any) => i.key === i)).every((i) => i));
+    }
     await collTemplates.updateOne({ _id: args.id }, { $set: { payload: args.payload, name: args.name } });
     await elastic.delete({
         index: 'template',
@@ -34,6 +55,9 @@ registerResolver('TemplateContext', 'update(id: String!, name: String, payload: 
     return true;
 });
 registerResolver('TemplateContext', 'del(id: String!)', 'Boolean! @auth', async (args, ctx, info) => {
+    if (args.id === '000000000000000000000') {
+        throw new Error('不能删除此模板。');
+    }
     const res = await collTemplates.deleteOne({ _id: args.id });
     await elastic.delete({
         index: 'template',

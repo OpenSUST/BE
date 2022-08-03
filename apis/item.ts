@@ -39,7 +39,7 @@ registerResolver(
     },
 );
 registerResolver(
-    'ItemContext', 'update(id: String!, set: JSON!)', 'Boolean! @auth',
+    'ItemContext', 'update(id: String!, set: JSON!)', 'Boolean! @auth(requires: USER)',
     async (args) => {
         const value = (await loadSchema(Object.keys(args.set)))(args.set);
         const res = await collData.findOneAndUpdate({ _id: args.id }, { $set: value }, { returnDocument: 'after' });
