@@ -11,11 +11,13 @@ const collKeys: Collection<Key> = db.collection('keys');
 
 async function loadSchema(keys: string[]) {
     const f = await collKeys.find({ _id: { $in: keys } }).toArray();
-    return Schema.object(
-        Object.fromEntries(
-            keys.map((i) => [i, new Schema(JSON.parse(f.find((k) => k._id === i)?.schema || "{ uid: 1, refs: { '1': { type: 'never', meta: {} } } }"))]),
-        ),
-    );
+    const s = {};
+    for (const key of keys) {
+        const t = f.find((i) => i._id === key);
+        if (t?.schema) s[key] = new Schema(t.schema);
+        else s[key] = Schema.never();
+    }
+    return Schema.object(s);
 }
 
 registerValue('ItemResponse', [
@@ -87,7 +89,13 @@ registerResolver(
                 },
             },
         });
-        const docs = await collData.find({ _id: { $in: res.hits.hits.map((i) => i._id) } }).toArray();
+        const docs = await collData.find({ _id: { $in: res.hits.hits.map((i) => i._id) } })
+            .project({
+                _id: 1,
+                images: 1,
+                title: 1,
+                description: 1,
+            }).toArray();
         const fields = new Set<string>();
         for (const doc of docs) for (const key in doc) fields.add(key);
         return {
