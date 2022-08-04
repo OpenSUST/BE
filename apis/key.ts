@@ -48,4 +48,3 @@ baseSchema('_id', {}, Schema.string());
 baseSchema('title', {}, Schema.string().required());
 baseSchema('description', {}, Schema.string().required());
 baseSchema('images', {}, schemaKind(Schema.array(Schema.string()), 'image'));
-baseSchema('file', {}, schemaKind(Schema.array(Schema.string()), 'file'));

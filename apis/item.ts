@@ -14,7 +14,7 @@ async function loadSchema(keys: string[]) {
     const s = {};
     for (const key of keys) {
         const t = f.find((i) => i._id === key);
-        if (t?.schema) s[key] = new Schema(t.schema);
+        if (t?.schema) s[key] = new Schema(JSON.parse(t.schema));
         else s[key] = Schema.never();
     }
     return Schema.object(s);
@@ -63,15 +63,27 @@ registerResolver('ItemContext', 'del(id: String!)', 'Boolean!  @auth', async (ar
     });
     return !!res.deletedCount;
 });
-registerResolver('ItemContext', 'get(id: String!)', 'ItemResponse', async (args) => {
-    const doc = await collData.findOne({ _id: args.id });
-    if (!doc) return { items: [], schema: Schema.object({}).toJSON() };
-    const keys = Object.keys(doc).filter((i) => doc[i] !== null);
-    const adoc = _.pick(doc, keys);
+registerResolver('ItemContext', 'get(id: String, ids: [String])', 'ItemResponse', async (args) => {
+    if (!args.id && !args.ids?.length) throw new Error('id or ids required');
+    if (args.id) {
+        const doc = await collData.findOne({ _id: args.id });
+        if (!doc) return { items: [], schema: Schema.object({}).toJSON() };
+        const keys = Object.keys(doc).filter((i) => doc[i] !== null);
+        const adoc = _.pick(doc, keys);
+        return {
+            items: [adoc],
+            schema: (await loadSchema(keys)).toJSON(),
+            total: 1,
+        };
+    }
+    const docs = await (await collData.find({ _id: { $in: args.ids } }).toArray())
+        .sort((a, b) => args.ids.indexOf(a._id) - args.ids.indexOf(b._id));
+    const keys = _.uniq(_.flatten(docs.map((i) => Object.keys(i).filter((j) => i[j] !== null))));
+    const adocs = docs.map((i) => _.pick(i, keys));
     return {
-        items: [adoc],
+        items: adocs,
         schema: (await loadSchema(keys)).toJSON(),
-        total: 1,
+        total: docs.length,
     };
 });
 registerResolver('ItemContext', 'count', 'Int!', async (args) => await collData.countDocuments());

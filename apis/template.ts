@@ -5,8 +5,11 @@ import { registerResolver, registerValue } from '../api';
 import { db, elastic } from '../services';
 
 const collTemplates: Collection<{ _id: string, name: string, payload: any }> = db.collection('templates');
+export interface Key { _id: string, localization: Record<string, string>, schema: string }
+const collKeys: Collection<Key> = db.collection('keys');
+
 (async () => {
-    const r = await collTemplates.findOne({ name: '000000000000000000000' });
+    const r = await collTemplates.findOne({ _id: '000000000000000000000' });
     if (!r) {
         collTemplates.insertOne({
             _id: '000000000000000000000',
@@ -16,10 +19,16 @@ const collTemplates: Collection<{ _id: string, name: string, payload: any }> = d
                 { key: 'title' },
                 { key: 'description' },
                 { key: 'images' },
-                { key: 'file' },
             ],
         });
     }
+    await elastic.index({
+        index: 'template',
+        id: '000000000000000000000',
+        body: {
+            name: '默认模板',
+        },
+    });
 })();
 
 registerValue('Template', [
@@ -40,7 +49,7 @@ registerResolver('TemplateContext', 'add(name: String!, payload: JSON!)', 'Strin
 });
 registerResolver('TemplateContext', 'update(id: String!, name: String, payload: JSON)', 'Boolean!', async (args, ctx, info) => {
     if (args.id === '000000000000000000000') {
-        assert(['_id', 'title', 'description', 'images', 'file'].map((i) => args.payload.find((i: any) => i.key === i)).every((i) => i));
+        assert(['_id', 'title', 'description', 'images'].map((i) => args.payload.find((i: any) => i.key === i)).every((i) => i));
     }
     await collTemplates.updateOne({ _id: args.id }, { $set: { payload: args.payload, name: args.name } });
     await elastic.delete({
@@ -87,3 +96,9 @@ registerResolver('TemplateContext', 'search(name: String, size: Int, from: Int)'
     }
 });
 registerResolver('TemplateContext', 'get(id: String!)', 'Template', async (args, ctx, info) => await collTemplates.findOne({ _id: args.id }));
+registerResolver('Template', 'keys', '[Key]', async (args, ctx, info) => {
+    if (!ctx.parent._id) return null;
+    const keys = ctx.parent.payload.map((i) => i.key);
+    return (await collKeys.find({ _id: { $in: keys } }).toArray())
+        .sort((a, b) => (ctx.parent.payload.findIndex((i) => i.key === a._id) - ctx.parent.payload.findIndex((i) => i.key === b._id)));
+});
