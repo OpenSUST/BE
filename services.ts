@@ -2,7 +2,8 @@ import { Client } from '@elastic/elasticsearch';
 import { Client as MinIOClient } from 'minio';
 import { Db, MongoClient } from 'mongodb';
 import {
-    bucket, dbName, elasticEndpoint, mongoUrl, region, s3ConnectionConfig,
+    bucket, dbName, elasticEndpoint, mongoUrl, prefix,
+    region, s3ConnectionConfig,
 } from './config';
 
 export let db: Db;
@@ -13,6 +14,7 @@ export { bucket, region } from './config';
 export async function connect() {
     const conn = await MongoClient.connect(mongoUrl);
     db = conn.db(dbName);
+    db.collection = ((orig) => (name) => (prefix ? orig(`${prefix}-${name}`) : orig(name)))(db.collection);
     try {
         const exists = await minio.bucketExists(bucket);
         if (!exists) await minio.makeBucket(bucket, region);

@@ -3,6 +3,7 @@ import { Collection } from 'mongodb';
 import { nanoid } from 'nanoid';
 import Schema from 'schemastery';
 import { registerResolver, registerValue } from '../api';
+import { prefix } from '../config';
 import { db, elastic } from '../services';
 import type { Key } from './key';
 
@@ -33,7 +34,7 @@ registerResolver(
         value._id ||= nanoid();
         const res = await collData.insertOne(value);
         await elastic.index({
-            index: 'data',
+            index: `${prefix}-data`,
             id: value._id,
             body: _.omit(value, '_id'),
         });
@@ -47,7 +48,7 @@ registerResolver(
         const res = await collData.findOneAndUpdate({ _id: args.id }, { $set: value }, { returnDocument: 'after' });
         if (res) {
             await elastic.index({
-                index: 'data',
+                index: `${prefix}-data`,
                 id: `${res.value._id}`,
                 document: _.omit(res.value, '_id'),
             });
@@ -58,7 +59,7 @@ registerResolver(
 registerResolver('ItemContext', 'del(id: String!)', 'Boolean!  @auth', async (args) => {
     const res = await collData.deleteOne({ _id: args.id });
     await elastic.delete({
-        index: 'data',
+        index: `${prefix}-data`,
         id: args.id,
     });
     return !!res.deletedCount;
@@ -91,7 +92,7 @@ registerResolver(
     'ItemContext', 'search(keyword: String!, size: Int, from: Int)', 'ItemResponse',
     async (args) => {
         const res = await elastic.search({
-            index: 'data',
+            index: `${prefix}-data`,
             size: args.size || 50,
             from: args.from || 0,
             query: {

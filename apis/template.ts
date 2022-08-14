@@ -2,6 +2,7 @@ import assert from 'assert';
 import { Collection } from 'mongodb';
 import { nanoid } from 'nanoid';
 import { registerResolver, registerValue } from '../api';
+import { prefix } from '../config';
 import { db, elastic } from '../services';
 
 const collTemplates: Collection<{ _id: string, name: string, payload: any }> = db.collection('templates');
@@ -23,7 +24,7 @@ const collKeys: Collection<Key> = db.collection('keys');
         });
     }
     await elastic.index({
-        index: 'template',
+        index: `${prefix}-template`,
         id: '000000000000000000000',
         body: {
             name: '默认模板',
@@ -41,7 +42,7 @@ registerResolver('TemplateContext', 'add(name: String!, payload: JSON!)', 'Strin
     const _id = nanoid();
     const res = await collTemplates.insertOne({ _id, ...args });
     await elastic.index({
-        index: 'template',
+        index: `${prefix}-template`,
         id: _id,
         body: { name: args.name },
     });
@@ -53,11 +54,11 @@ registerResolver('TemplateContext', 'update(id: String!, name: String, payload: 
     }
     await collTemplates.updateOne({ _id: args.id }, { $set: { payload: args.payload, name: args.name } });
     await elastic.delete({
-        index: 'template',
+        index: `${prefix}-template`,
         id: args.id,
     });
     await elastic.index({
-        index: 'template',
+        index: `${prefix}-template`,
         id: args.id,
         body: { name: args.name },
     });
@@ -69,7 +70,7 @@ registerResolver('TemplateContext', 'del(id: String!)', 'Boolean! @auth', async 
     }
     const res = await collTemplates.deleteOne({ _id: args.id });
     await elastic.delete({
-        index: 'template',
+        index: `${prefix}-template`,
         id: args.id,
     });
     return !!res.deletedCount;
@@ -77,7 +78,7 @@ registerResolver('TemplateContext', 'del(id: String!)', 'Boolean! @auth', async 
 registerResolver('TemplateContext', 'search(name: String, size: Int, from: Int)', '[Template]', async (args) => {
     try {
         const res = await elastic.search({
-            index: 'template',
+            index: `${prefix}-template`,
             size: args.size || 50,
             from: args.from || 0,
             query: {
