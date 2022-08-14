@@ -14,7 +14,7 @@ export { bucket, region } from './config';
 export async function connect() {
     const conn = await MongoClient.connect(mongoUrl);
     db = conn.db(dbName);
-    db.collection = ((orig) => (name) => (prefix ? orig(`${prefix}-${name}`) : orig(name)))(db.collection);
+    db.collection = ((orig) => (name) => (prefix ? orig(`${prefix}-${name}`) : orig(name)))(db.collection.bind(db));
     try {
         const exists = await minio.bucketExists(bucket);
         if (!exists) await minio.makeBucket(bucket, region);
