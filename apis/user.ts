@@ -54,3 +54,13 @@ registerResolver('UserContext', 'logout', 'Boolean! @auth(requires: USER)', asyn
 registerResolver('UserContext', 'count', 'Int!', async (args) => await collUser.countDocuments());
 
 collUser.createIndex({ username: 1 }, { unique: true });
+collUser.findOne({ username: 'admin' }).then((res) => {
+    if (!res) {
+        collUser.insertOne({
+            username: 'admin',
+            hash: crypto.pbkdf2Sync('admin', 'admin', 100000, 64, 'sha256').toString('hex').substr(0, 64),
+            roles: ['USER', 'ADMIN'],
+            token: [],
+        });
+    }
+});

@@ -10,6 +10,17 @@ import type { Key } from './key';
 const collData: Collection<any> = db.collection('data');
 const collKeys: Collection<Key> = db.collection('keys');
 
+elastic.index({
+    index: `${prefix}-data`,
+    id: 'create-index-test',
+    document: { a: 'test' },
+}).then(() => {
+    elastic.delete({
+        index: `${prefix}-data`,
+        id: 'create-index-test',
+    });
+});
+
 async function loadSchema(keys: string[]) {
     const f = await collKeys.find({ _id: { $in: keys } }).toArray();
     const s = {};
@@ -118,5 +129,3 @@ registerResolver(
         };
     },
 );
-
-collData.updateOne({ _id: '1' }, { $set: { title: 'test', description: '123', images: ['a.png'] } }, { upsert: true }).then(console.log);
