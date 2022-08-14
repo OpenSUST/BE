@@ -4,6 +4,7 @@ import { ApolloServer } from 'apollo-server';
 import { defaultFieldResolver } from 'graphql';
 import { resolvers as scalarResolvers, typeDefs } from 'graphql-scalars';
 import * as bus from './bus';
+import { port } from './config';
 import { db } from './services';
 
 const coll = db.collection('user');
@@ -133,13 +134,7 @@ bus.on('app/started', () => {
         }),
     });
 
-    server.listen(4000, '0.0.0.0').then(({ url }) => {
+    server.listen(port, '0.0.0.0').then(({ url }) => {
         console.log(`🚀  Server ready at ${url}`);
     });
 });
-
-coll.updateOne({ _id: '123test' }, {
-    $set: {
-        token: ['123test'], password: '1', roles: ['GUEST', 'USER', 'ADMIN'], username: 'testuser',
-    },
-}, { upsert: true });
