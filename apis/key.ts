@@ -11,17 +11,24 @@ registerValue('Key', [
     ['localization', 'JSON!'],
     ['schema', 'String!'],
 ]);
-registerResolver('KeyContext', 'get(ids: [String])', '[Key]', async (args) => await collKeys.find(args.ids ? { _id: { $in: args.ids } } : {}).toArray());
+registerResolver('KeyContext', 'get(ids: [String])', '[Key]', async (args) => await collKeys.find(args.ids ? { _id: { $in: args.ids.map((i) => i.replace(/[.$]/g, '_')) } } : {}).toArray());
 registerResolver('KeyContext', 'add(key: String!, schema: String!)', 'Boolean! @auth', async (args) => {
-    const res = await collKeys.insertOne({ _id: args.key, schema: args.schema, localization: {} });
+    const res = await collKeys.insertOne({
+        _id: args.key.replace(/[.$]/g, '_'),
+        schema: args.schema,
+        localization: {
+            'zh-CN': args.key,
+        },
+    });
+
     return !!res.insertedId;
 });
 registerResolver('KeyContext', 'del(key: String!)', 'Boolean! @auth', async (args) => {
-    const res = await collKeys.deleteOne({ _id: args.key });
+    const res = await collKeys.deleteOne({ _id: args.key.replace(/[.$]/g, '_') });
     return !!res.deletedCount;
 });
 registerResolver('KeyContext', 'setLocalization(key: String!, lang: String!, value: String!)', 'Boolean! @auth', async (args) => {
-    const res = await collKeys.updateOne({ _id: args.key }, { $set: { [`localization.${args.lang}`]: args.value } });
+    const res = await collKeys.updateOne({ _id: args.key.replace(/[.$]/g, '_') }, { $set: { [`localization.${args.lang}`]: args.value } });
     console.log(res);
     return !!res.modifiedCount;
 });
@@ -48,3 +55,16 @@ baseSchema('_id', {}, Schema.string());
 baseSchema('title', {}, Schema.string().required());
 baseSchema('description', {}, Schema.string().required());
 baseSchema('images', {}, schemaKind(Schema.array(Schema.string()), 'image'));
+
+collKeys.find({}).toArray().then((keys) => {
+    for (const key of keys) {
+        const n = { ...key };
+        if (key._id.includes('.')) {
+            n._id = key._id.replace(/[.$]/g, '_');
+            n.localization['zh-CN'] = key._id;
+            collKeys.deleteOne({ _id: key._id }).then(() => {
+                collKeys.insertOne(n);
+            });
+        }
+    }
+});
