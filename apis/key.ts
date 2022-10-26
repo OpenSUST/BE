@@ -3,13 +3,14 @@ import Schema from 'schemastery';
 import { registerResolver, registerValue } from '../api';
 import { db } from '../services';
 
-export interface Key { _id: string, localization: Record<string, string>, schema: string }
+export interface Key { _id: string, localization: Record<string, string>, schema: string, meta?: Record<string, any> }
 const collKeys: Collection<Key> = db.collection('keys');
 registerResolver('Query', 'key', 'KeyContext', () => ({}));
 registerValue('Key', [
     ['_id', 'String!'],
     ['localization', 'JSON!'],
     ['schema', 'String!'],
+    ['meta', 'JSON'],
 ]);
 registerResolver('KeyContext', 'get(ids: [String])', '[Key]', async (args) => await collKeys.find(args.ids ? { _id: { $in: args.ids.map((i) => i.replace(/[.$]/g, '_')) } } : {}).toArray());
 registerResolver('KeyContext', 'add(key: String!, schema: String!)', 'Boolean! @auth', async (args) => {
@@ -22,6 +23,10 @@ registerResolver('KeyContext', 'add(key: String!, schema: String!)', 'Boolean! @
     });
 
     return !!res.insertedId;
+});
+registerResolver('KeyContext', 'setMeta(key: String!, meta: JSON!)', 'Boolean! @auth', async (args) => {
+    const res = await collKeys.updateOne({ _id: args.key.replace(/[.$]/g, '_') }, { $set: { meta: args.meta } });
+    return !!res.modifiedCount;
 });
 registerResolver('KeyContext', 'del(key: String!)', 'Boolean! @auth', async (args) => {
     const res = await collKeys.deleteOne({ _id: args.key.replace(/[.$]/g, '_') });
