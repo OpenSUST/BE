@@ -12,7 +12,9 @@ registerValue('Key', [
     ['schema', 'String!'],
     ['meta', 'JSON'],
 ]);
-registerResolver('KeyContext', 'get(ids: [String])', '[Key]', async (args) => await collKeys.find(args.ids ? { _id: { $in: args.ids.map((i) => i.replace(/[.$]/g, '_')) } } : {}).toArray());
+registerResolver('KeyContext', 'get(ids: [String])', '[Key]', async (args) => await collKeys
+    .find(args.ids ? { _id: { $in: args.ids.map((i) => i.replace(/[.$]/g, '_')) } } : {})
+    .sort({ _id: 1 }).toArray());
 registerResolver('KeyContext', 'add(key: String!, schema: String!)', 'Boolean! @auth', async (args) => {
     const res = await collKeys.insertOne({
         _id: args.key.replace(/[.$]/g, '_'),
@@ -25,7 +27,15 @@ registerResolver('KeyContext', 'add(key: String!, schema: String!)', 'Boolean! @
     return !!res.insertedId;
 });
 registerResolver('KeyContext', 'setMeta(key: String!, meta: JSON!)', 'Boolean! @auth', async (args) => {
-    const res = await collKeys.updateOne({ _id: args.key.replace(/[.$]/g, '_') }, { $set: { meta: args.meta } });
+    const current = await collKeys.findOne({ _id: args.key.replace(/[.$]/g, '_') });
+    if (!current) return false;
+    const schema = new Schema(JSON.parse(current.schema));
+    schema.meta ||= {};
+    Object.assign(schema.meta, args.meta);
+    const res = await collKeys.updateOne(
+        { _id: args.key.replace(/[.$]/g, '_') },
+        { $set: { schema: JSON.stringify(schema.toJSON()) } },
+    );
     return !!res.modifiedCount;
 });
 registerResolver('KeyContext', 'del(key: String!)', 'Boolean! @auth', async (args) => {
